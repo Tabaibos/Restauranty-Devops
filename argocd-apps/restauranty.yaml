@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/Tabaibos/Restauranty-DevopsProject.git
+    repoURL: https://github.com/Tabaibos/Restauranty-Devops.git
     targetRevision: main
     path: k8s
     helm:

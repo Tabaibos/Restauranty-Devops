@@ -19,3 +19,5 @@ https://medium.com/@vincenthartmann/how-to-add-a-security-scan-with-trivy-in-git
 
 grafana and prometheus is up, still need to scrape data 
 https://oneuptime.com/blog/post/2026-02-16-how-to-set-up-prometheus-and-grafana-monitoring-stack-on-aks-using-helm/view   step 8 por fazer 
+
+testing commit on new "clean" repo
