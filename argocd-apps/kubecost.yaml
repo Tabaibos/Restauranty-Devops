@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubecost
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://kubecost.github.io/cost-analyzer/
+    chart: cost-analyzer
+    targetRevision: 2.3.3
+    helm:
+      valuesObject:
+        # free public Token from opensource code
+        kubecostToken: "aGVsbUBrdWJlY29zdC5jb20=xm343yadf98"
+
+        global:
+          clusterId: "restauranty-aks"
+          prometheus:
+            enabled: false
+            fqdn: "http://prometheus-stack-kube-prom-prometheus.monitoring.svc.cluster.local:9090"
+          grafana:
+            enabled: false
+            proxy: false
+
+        prometheus:
+          server:
+            global:
+              external_labels:
+                cluster_id: "restauranty-aks"   
+
+        networkCosts:
+          enabled: true
+
+        serviceMonitor:
+          enabled: true
+
+        persistentVolume:
+          enabled: true
+          size: 10Gi
+          storageClass: managed-csi   # dados de custo históricos: mesmo raciocínio do Prometheus TSDB
+
+        kubecostProductConfigs:
+          clusterName: "restauranty-aks"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kubecost
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

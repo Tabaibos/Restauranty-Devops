@@ -1,0 +1,93 @@
+services:
+  mongo:
+    image: mongo:6
+    container_name: restauranty-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - restauranty-net
+
+  auth:
+    build: ./backend/auth
+    container_name: restauranty-auth
+    env_file:
+      - ./backend/auth/.env
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/restauranty
+      - PORT=3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      - mongo
+    networks:
+      - restauranty-net
+
+  discounts:
+    build: ./backend/discounts
+    container_name: restauranty-discounts
+    env_file:
+      - ./backend/discounts/.env
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/restauranty
+      - PORT=3002
+    ports:
+      - "3002:3002"
+    depends_on:
+      - mongo
+    networks:
+      - restauranty-net
+
+  items:
+    build: ./backend/items
+    container_name: restauranty-items
+    env_file:
+      - ./backend/items/.env
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/restauranty
+      - PORT=3003
+    ports:
+      - "3003:3003"
+    depends_on:
+      - mongo
+    networks:
+      - restauranty-net
+
+  client:
+    build: ./client
+    container_name: restauranty-client
+    env_file:
+      - ./client/.env
+    environment:
+      - REACT_APP_SERVER_URL=http://localhost:80
+    ports:
+      - "3000:3000"
+    depends_on:
+      - auth
+      - discounts
+      - items
+    networks:
+      - restauranty-net
+
+  haproxy:
+    image: haproxy:2.9-alpine
+    container_name: restauranty-haproxy
+    volumes:
+      - ./haproxy.docker.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - auth
+      - discounts
+      - items
+      - client
+    networks:
+      - restauranty-net
+
+networks:
+  restauranty-net:
+    driver: bridge
+
+volumes:
+  mongo-data:

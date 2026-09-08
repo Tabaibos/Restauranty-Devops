@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: tempo
+    targetRevision: 1.21.1
+    helm:
+      valuesObject:
+        persistence:
+          enabled: true
+        tempo:
+          tag: main-814c1c6
+          metricsGenerator:
+            enabled: true
+            remoteWriteUrl: "http://prometheus-stack-kube-prom-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+          overrides:
+            defaults:
+              metrics_generator:
+                processors: [service-graphs, span-metrics, local-blocks]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy: {}

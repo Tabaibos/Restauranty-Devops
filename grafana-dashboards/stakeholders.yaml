@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stakeholders-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  stakeholders-dashboard.json: |
+    {
+      "title": "Restauranty - Stakeholders",
+      "tags": ["restauranty"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "1m",
+      "time": { "from": "now-24h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Users",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+          "targets": [{ "expr": "users_total" }]
+        },
+        {
+          "id": 2,
+          "title": "Items in menu",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+          "targets": [{ "expr": "items_total" }]
+        },
+        {
+          "id": 3,
+          "title": "Active coupons",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+          "targets": [{ "expr": "coupons_total" }]
+        },
+        {
+          "id": 4,
+          "title": "Total Campains",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+          "targets": [{ "expr": "campaigns_total" }]
+        },
+        {
+          "id": 5,
+          "title": "Requests per service",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+          "targets": [
+            { "expr": "sum(rate(http_requests_overall_total{namespace=\"restauranty\"}[5m])) by (job)", "legendFormat": "{{job}}" }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Errors (5xx/500) per service",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+          "targets": [
+            { "expr": "sum(rate(http_requests_total{namespace=\"restauranty\", statusCode=~\"5..\"}[5m])) by (job, route)", "legendFormat": "{{job}} {{route}}" }
+          ]
+        }
+      ]
+    }

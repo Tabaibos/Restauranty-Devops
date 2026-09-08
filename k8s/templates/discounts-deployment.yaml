@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discounts-deployment
+spec:
+  replicas: {{ .Values.discounts.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.discounts.rolling.maxUnavailable }}
+      maxSurge: {{ .Values.discounts.rolling.maxSurge }}
+  selector:
+    matchLabels:
+      app: discounts
+  template:
+    metadata:
+      labels:
+        app: discounts
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: auth
+                topologyKey: kubernetes.io/hostname    
+      containers:
+      - name: discounts-container
+        image: "{{ .Values.global.acrLoginServer }}/discounts-restauranty:{{ .Values.discounts.imageTag }}"
+        resources:
+          requests:
+            cpu: {{ .Values.discounts.resources.requests.cpu | quote }}
+            memory: {{ .Values.discounts.resources.requests.memory | quote }}
+          limits:
+            cpu: {{ .Values.discounts.resources.limits.cpu | quote }}
+            memory: {{ .Values.discounts.resources.limits.memory | quote }}
+        ports:
+        - containerPort: {{ .Values.discounts.port }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.discounts.port }}
+          initialDelaySeconds: {{ .Values.discounts.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.discounts.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.discounts.readinessProbe.failureThreshold }}
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.discounts.port }}
+          initialDelaySeconds: {{ .Values.discounts.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.discounts.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.discounts.livenessProbe.failureThreshold }}
+        env:
+          - name: PORT
+            value: {{ .Values.discounts.port | quote }}
+          - name: MONGODB_URI
+            value: mongodb://{{ .Values.mongo.host }}:{{ .Values.mongo.port }}/{{ .Values.mongo.dbname }}
+          - name: CLOUD_NAME
+            value: {{ .Values.secrets.cloudname | quote }}
+          - name: CLOUD_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: mongo-secret
+                key: CLOUD_API_KEY
+          - name: CLOUD_API_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: mongo-secret
+                key: CLOUD_API_SECRET
+          - name: SECRET
+            valueFrom:
+              secretKeyRef:
+                name: mongo-secret
+                key: SECRET
+          - name: OTEL_SERVICE_NAME
+            value: {{ .Values.discounts.otel.serviceName | quote }}
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: {{ .Values.global.otel.exporterEndpoint | quote }}
+          - name: OTEL_LOG_LEVEL
+            value: {{ .Values.discounts.otel.logLevel | default "info" | quote }}
+---

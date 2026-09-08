@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: restauranty-ingress
+  annotations:
+    #kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "cert-manager"
+spec:
+  tls:
+    - hosts: 
+      - restauranty-joaquim.duckdns.org
+      secretName: quimsafe-tls-secret
+  ingressClassName: nginx
+  rules:
+    - host: restauranty-joaquim.duckdns.org 
+      http:
+        paths:
+          - path: /api/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 80
+          - path: /api/discounts
+            pathType: Prefix
+            backend:
+              service:
+                name: discounts-service
+                port:
+                  number: 80
+          - path: /api/items
+            pathType: Prefix
+            backend:
+              service:
+                name: items-service
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: front-service
+                port:
+                  number: 80

@@ -1,0 +1,259 @@
+name: Production Pipeline for CI/CD of Restauranty
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+env:
+  AZURE_RESOURCE_GROUP: restauranty-rg-joaquim
+  AKS_CLUSTER_NAME: restauranty-aks
+  ACR_NAME: restaurantyacrjoaquim
+  HELM_CHART_PATH: k8s/
+  HELM_RELEASE_NAME: restauranty
+  NAMESPACE: restauranty
+
+jobs:
+  detect-changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      auth: ${{ steps.diff.outputs.auth }}
+      discounts: ${{ steps.diff.outputs.discounts }}
+      items: ${{ steps.diff.outputs.items }}
+      front: ${{ steps.diff.outputs.front }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 
+
+    - name: Applying changes 
+      id: diff
+      run: |
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          CHANGED_FILES=$(git diff --name-only "$BEFORE" "$AFTER")
+          echo "files CHANGED in this push:"
+          echo "$CHANGED_FILES"
+
+          echo "auth=$(echo "$CHANGED_FILES" | grep -q '^backend/auth/' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "discounts=$(echo "$CHANGED_FILES" | grep -q '^backend/discounts/' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "items=$(echo "$CHANGED_FILES" | grep -q '^backend/items/' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "front=$(echo "$CHANGED_FILES" | grep -q '^client/' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  secret-scan:                         
+    name: Scan for leaked secrets (TruffleHog)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.before }}
+          head: ${{ github.sha }}
+
+
+  build-and-push:
+    name: Build & Push Images to ACR
+    runs-on: ubuntu-latest
+    environment: production
+    needs: [detect-changes, secret-scan]
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}    
+      
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build and push auth image
+        if: needs.detect-changes.outputs.auth == 'true'
+        run: |
+          az acr build --registry ${{ env.ACR_NAME }} \
+            --image auth-restauranty:${{ github.sha }} \
+            ./backend/auth
+
+      - name: Scan auth image with Trivy
+        if: needs.detect-changes.outputs.auth == 'true'
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: '${{ env.ACR_NAME }}.azurecr.io/auth-restauranty:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      - name: Build and push discounts image
+        if: needs.detect-changes.outputs.discounts == 'true'
+        run: |
+          az acr build --registry ${{ env.ACR_NAME }} \
+            --image discounts-restauranty:${{ github.sha }} \
+            ./backend/discounts
+
+      - name: Scan discounts image with Trivy
+        if: needs.detect-changes.outputs.discounts == 'true'
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: '${{ env.ACR_NAME }}.azurecr.io/discounts-restauranty:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      - name: Build and push items image
+        if: needs.detect-changes.outputs.items == 'true'
+        run: |
+          az acr build --registry ${{ env.ACR_NAME }} \
+            --image items-restauranty:${{ github.sha }} \
+            ./backend/items
+
+      - name: Scan items image with Trivy
+        if: needs.detect-changes.outputs.items == 'true'
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: '${{ env.ACR_NAME }}.azurecr.io/items-restauranty:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      - name: Build and push front image
+        if: needs.detect-changes.outputs.front == 'true'
+        run: |
+          az acr build --registry ${{ env.ACR_NAME }} \
+            --image front-restauranty:${{ github.sha }} \
+            ./client
+            
+      - name: Scan front(/client) image with Trivy
+        if: needs.detect-changes.outputs.front == 'true'
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: '${{ env.ACR_NAME }}.azurecr.io/front-restauranty:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  deploy:
+    name: Deploy to AKS via Helm
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-and-push]
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Install kubectl on GitHub's VM
+        run: |
+          if command -v kubectl >/dev/null 2>&1; then
+            echo "kubectl already installed: $(kubectl version --client --short 2>/dev/null || kubectl version --client)"
+          else
+            echo "kubectl not found, installing ..."
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+
+      - name: Install Helm on GitHub's VM
+        run: |
+          if command -v helm >/dev/null 2>&1; then
+            echo "helm already installed: $(helm version --short)"
+          else
+            echo "helm not found, installing ..."
+            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          fi
+
+      - name: Install ArgoCD CLI on GitHub's VM
+        run: |
+          if command -v argocd >/dev/null 2>&1; then
+            echo "argocd already installed"
+          else
+            curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+            chmod +x argocd-linux-amd64
+            sudo mv argocd-linux-amd64 /usr/local/bin/argocd
+          fi
+
+
+      - name: Update kubeconfig (az aks get-credentials)
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AKS_CLUSTER_NAME }} \
+            --overwrite-existing
+
+      - name: Login to ArgoCD
+        run: |
+          argocd login restauranty-argocd.duckdns.org \
+            --header "Authorization: Basic $(echo -n '${{ secrets.ARGOCD_BASIC_AUTH_USER }}:${{ secrets.ARGOCD_BASIC_AUTH_PASS }}' | base64)" \
+            --username admin \
+            --password ${{ secrets.ARGOCD_ADMIN_PASSWORD }} \
+            --grpc-web
+
+      - name: Update mongo-secret in cluster
+        run: |
+          kubectl create secret generic mongo-secret \
+            --namespace restauranty \
+            --from-literal=CLOUD_API_KEY='${{ secrets.CLOUD_API_KEY }}' \
+            --from-literal=CLOUD_API_SECRET='${{ secrets.CLOUD_API_SECRET }}' \
+            --from-literal=SECRET='${{ secrets.APP_SECRET }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Update image tag via ArgoCD + argo sync
+        run: |
+          AUTH_HEADER="Authorization: Basic $(echo -n '${{ secrets.ARGOCD_BASIC_AUTH_USER }}:${{ secrets.ARGOCD_BASIC_AUTH_PASS }}' | base64)"
+
+          SET_ARGS=""
+          if [ "${{ needs.detect-changes.outputs.auth }}" = "true" ]; then
+            SET_ARGS="$SET_ARGS -p auth.imageTag=${{ github.sha }}"
+          fi
+          if [ "${{ needs.detect-changes.outputs.discounts }}" = "true" ]; then
+            SET_ARGS="$SET_ARGS -p discounts.imageTag=${{ github.sha }}"
+          fi
+          if [ "${{ needs.detect-changes.outputs.items }}" = "true" ]; then
+            SET_ARGS="$SET_ARGS -p items.imageTag=${{ github.sha }}"
+          fi
+          if [ "${{ needs.detect-changes.outputs.front }}" = "true" ]; then
+            SET_ARGS="$SET_ARGS -p front.imageTag=${{ github.sha }}"
+          fi
+
+          if [ -n "$SET_ARGS" ]; then
+            argocd app set restauranty $SET_ARGS --header "$AUTH_HEADER" --grpc-web
+          fi
+
+          argocd app sync restauranty --header "$AUTH_HEADER" --grpc-web
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/auth-deployment -n ${{ env.NAMESPACE }} --timeout=120s
+          kubectl rollout status deployment/discounts-deployment -n ${{ env.NAMESPACE }} --timeout=120s
+          kubectl rollout status deployment/items-deployment -n ${{ env.NAMESPACE }} --timeout=120s
+          kubectl rollout status deployment/front-deployment -n ${{ env.NAMESPACE }} --timeout=120s

@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-deployment
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.auth.rolling.maxUnavailable }}
+      maxSurge: {{ .Values.auth.rolling.maxSurge }}
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: auth
+                topologyKey: kubernetes.io/hostname
+      containers:
+      - name: auth-container
+        image: "{{ .Values.global.acrLoginServer }}/auth-restauranty:{{ .Values.auth.imageTag }}"
+        resources:
+          requests:
+            cpu: {{ .Values.auth.resources.requests.cpu | quote }}
+            memory: {{ .Values.auth.resources.requests.memory | quote }}
+          limits:
+            cpu: {{ .Values.auth.resources.limits.cpu | quote }}
+            memory: {{ .Values.auth.resources.limits.memory | quote }}
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          tcpSocket:
+            port: 80
+          initialDelaySeconds: {{ .Values.auth.readinessProbe.initialDelaySeconds}}
+          periodSeconds: {{ .Values.auth.readinessProbe.periodSeconds}}
+          failureThreshold: {{ .Values.auth.readinessProbe.failureThreshold}}
+        livenessProbe:
+          tcpSocket:
+            port: 80
+          initialDelaySeconds: {{ .Values.auth.livenessProbe.initialDelaySeconds}}
+          periodSeconds: {{ .Values.auth.livenessProbe.periodSeconds}}
+          failureThreshold: {{ .Values.auth.livenessProbe.failureThreshold}}
+        env:
+          - name: PORT
+            value: {{ .Values.auth.port | quote }}
+          - name: MONGODB_URI
+            value: mongodb://{{ .Values.mongo.host }}:{{ .Values.mongo.port }}/{{ .Values.mongo.dbname }}
+          - name: CLOUD_NAME
+            value: {{ .Values.secrets.cloudname }}
+          - name: CLOUD_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: mongo-secret
+                key: CLOUD_API_KEY          
+          - name: CLOUD_API_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: mongo-secret
+                key: CLOUD_API_SECRET
+          - name: SECRET
+            valueFrom:
+              secretKeyRef:
+                name: mongo-secret
+                key: SECRET
+          - name: OTEL_SERVICE_NAME
+            value: {{ .Values.auth.otel.serviceName | quote }}
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: {{ .Values.global.otel.exporterEndpoint | quote }}
+          - name: OTEL_LOG_LEVEL
+            value: {{ .Values.auth.otel.logLevel | default "info" | quote }}
+          
+
+---
+
+

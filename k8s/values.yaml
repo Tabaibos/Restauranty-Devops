@@ -1,0 +1,139 @@
+global:
+  acrLoginServer: restaurantyacrjoaquim.azurecr.io
+  imageTag: latest
+  otel:
+     exporterEndpoint: "http://alloy.monitoring.svc.cluster.local:4318/v1/traces"
+
+secrets:
+  mongo:
+    apikey: ""
+    apisecret: "" 
+    secret: ""
+  cloudname: ""
+
+
+
+mongo:
+  image: mongo:6
+  host: my-mongo
+  port: 27017
+  dbname: restauranty
+  storage:
+    className: managed-csi
+    size: 5Gi
+
+
+auth:
+  imageTag: latest
+  port: 80
+  rolling:
+    maxUnavailable: 1
+    maxSurge: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    failureThreshold: 3
+  hpa: 
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUPercentage: 60
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+  otel:
+    serviceName: "auth-service"
+    logLevel: "error"
+
+
+
+discounts:
+  imageTag: latest
+  rolling:
+    maxUnavailable: 1
+    maxSurge: 3
+  port: 80
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    failureThreshold: 3 
+  hpa: 
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 60
+  resources:
+    requests: 
+      cpu: "150m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  otel:
+    serviceName: "discounts-service"
+    logLevel: "error"
+
+
+items:
+  imageTag: latest
+  replicas: 2
+  port: 80
+  rolling: 
+    maxUnavailable: 1
+    maxSurge: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    failureThreshold: 3 
+  hpa: 
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 60
+  resources:
+    requests: 
+      cpu: "150m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  otel:
+    serviceName: "items-service"
+    logLevel: "error"
+
+front:
+  imageTag: latest
+  port: 80
+  replicas: 2
+  rolling:
+    maxUnavailable: 1
+    maxSurge: 3
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 20
+    failureThreshold: 3
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70

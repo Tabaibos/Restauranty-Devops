@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: discounts-service
+  labels:
+    app: discounts
+spec:
+  selector:
+    app: discounts
+  ports:
+    - name: http
+      port: {{ .Values.discounts.port }}
+      targetPort: {{ .Values.discounts.port }}
+      protocol: TCP
+  type: ClusterIP

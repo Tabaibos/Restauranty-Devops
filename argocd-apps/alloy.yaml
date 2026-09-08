@@ -1,0 +1,92 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: 1.12.1
+    helm:
+      valuesObject:
+        alloy:
+          configMap:
+            content: |
+              otelcol.receiver.otlp "otlp_receiver" {
+                grpc { endpoint = "0.0.0.0:4317" }
+                http {
+                  endpoint = "0.0.0.0:4318"
+                  cors {
+                    allowed_origins = ["*"]
+                    allowed_headers = ["*"]
+                    max_age         = 600
+                  }
+                }
+                output {
+                  traces = [otelcol.exporter.otlp.tempo.input]
+                }
+              }
+              otelcol.exporter.otlp "tempo" {
+                client {
+                  endpoint = "tempo:4317"
+                  tls { insecure = true }
+                }
+              }
+              loki.write "default" {
+                endpoint {
+                  url = "http://loki-loki-distributed-distributor.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+                }
+              }
+              discovery.kubernetes "pod" {
+                role = "pod"
+              }
+              discovery.relabel "pod_logs" {
+                targets = discovery.kubernetes.pod.targets
+                rule {
+                  source_labels = ["__meta_kubernetes_namespace"]
+                  action = "replace"
+                  target_label = "namespace"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_container_name"]
+                  action = "replace"
+                  target_label = "container"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+                  action = "replace"
+                  target_label = "__path__"
+                  separator = "/"
+                  replacement = "/var/log/pods/*$1/*.log"
+                }
+              }
+              loki.source.kubernetes "pod_logs" {
+                targets    = discovery.relabel.pod_logs.output
+                forward_to = [loki.process.pod_logs.receiver]
+              }
+              loki.process "pod_logs" {
+                stage.static_labels {
+                  values = {
+                    cluster = sys.env("CLUSTER"),
+                  }
+                }
+                forward_to = [loki.write.default.receiver]
+              }
+          extraEnv:
+            - name: CLUSTER
+              value: restauranty-aks
+          extraPorts:
+            - name: otlp-grpc
+              port: 4317
+              protocol: TCP
+              targetPort: 4317
+            - name: otlp-http
+              port: 4318
+              protocol: TCP
+              targetPort: 4318
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy: {}

@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: items-deployment
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.items.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.items.rolling.maxUnavailable }}
+      maxSurge: {{ .Values.items.rolling.maxSurge }}
+  selector:
+    matchLabels:
+      app: items
+  template:
+    metadata:
+      labels:
+        app: items
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: auth
+                topologyKey: kubernetes.io/hostname    
+      containers:
+      - name: items-container
+        image: "{{ .Values.global.acrLoginServer }}/items-restauranty:{{ .Values.items.imageTag }}"
+        resources:
+          requests:
+            cpu: {{ .Values.items.resources.requests.cpu | quote }}
+            memory: {{ .Values.items.resources.requests.memory | quote }}
+          limits:
+            cpu: {{ .Values.items.resources.limits.cpu | quote }}
+            memory: {{ .Values.items.resources.limits.memory | quote }}
+        ports:
+        - containerPort: {{ .Values.items.port }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.items.port }}
+          initialDelaySeconds: {{ .Values.items.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.items.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.items.readinessProbe.failureThreshold }}
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.items.port }}
+          initialDelaySeconds: {{ .Values.items.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.items.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.items.livenessProbe.failureThreshold }}
+        env:
+          - name: PORT
+            value: {{ .Values.items.port | quote }}
+          - name: MONGODB_URI
+            value: mongodb://{{ .Values.mongo.host }}:{{ .Values.mongo.port }}/{{ .Values.mongo.dbname }}
+          - name: CLOUD_NAME
+            value: {{ .Values.secrets.cloudname | quote }}
+          - name: CLOUD_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: mongo-secret
+                key: CLOUD_API_KEY
+          - name: CLOUD_API_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: mongo-secret
+                key: CLOUD_API_SECRET
+          - name: SECRET
+            valueFrom:
+              secretKeyRef:
+                name: mongo-secret
+                key: SECRET
+          - name: OTEL_SERVICE_NAME
+            value: {{ .Values.items.otel.serviceName | quote }}
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: {{ .Values.global.otel.exporterEndpoint | quote }}
+          - name: OTEL_LOG_LEVEL
+            value: {{ .Values.items.otel.logLevel | default "info" | quote }}
+---

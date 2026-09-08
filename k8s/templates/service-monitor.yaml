@@ -1,0 +1,23 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+
+metadata:
+  name: restauranty-metrics
+  namespace: restauranty
+  labels:
+    release: prometheus-stack
+
+spec:
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - auth
+          - discounts
+          - items
+
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

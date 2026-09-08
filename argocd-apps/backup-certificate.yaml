@@ -1,0 +1,41 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  creationTimestamp: "2026-08-27T15:03:31Z"
+  generation: 1
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  name: quimsafe-tls-secret
+  namespace: restauranty
+  ownerReferences:
+  - apiVersion: networking.k8s.io/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Ingress
+    name: restauranty-ingress
+    uid: f631fe1a-e849-42b2-96aa-21760f87b521
+  resourceVersion: "892175"
+  uid: edd08715-70ca-43ee-9abc-d0ebba71fcfd
+spec:
+  dnsNames:
+  - restauranty-joaquim.duckdns.org
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: cert-manager
+  secretName: quimsafe-tls-secret
+  usages:
+  - digital signature
+  - key encipherment
+status:
+  conditions:
+  - lastTransitionTime: "2026-08-27T15:03:35Z"
+    message: Certificate is up to date and has not expired
+    observedGeneration: 1
+    reason: Ready
+    status: "True"
+    type: Ready
+  notAfter: "2026-11-25T14:05:02Z"
+  notBefore: "2026-08-27T14:05:03Z"
+  renewalTime: "2026-10-26T14:05:02Z"
+  revision: 1

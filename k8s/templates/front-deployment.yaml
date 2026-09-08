@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: front-deployment
+spec:
+  replicas: {{ .Values.front.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.front.rolling.maxUnavailable }}
+      maxSurge: {{ .Values.front.rolling.maxSurge }}
+  selector:
+    matchLabels:
+      app: front
+  template:
+    metadata:
+      labels:
+        app: front
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: auth
+                topologyKey: kubernetes.io/hostname
+      containers:
+      - name: front-container
+        image: "{{ .Values.global.acrLoginServer }}/front-restauranty:{{ .Values.front.imageTag }}"
+        resources:
+          requests:
+            cpu: {{ .Values.front.resources.requests.cpu | quote }}
+            memory: {{ .Values.front.resources.requests.memory | quote }}
+          limits:
+            cpu: {{ .Values.front.resources.limits.cpu | quote }}
+            memory: {{ .Values.front.resources.limits.memory | quote }}
+        ports:
+        - containerPort: {{ .Values.front.port }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.front.port }}
+          initialDelaySeconds: {{ .Values.front.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.front.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.front.readinessProbe.failureThreshold }}
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.front.port }}
+          initialDelaySeconds: {{ .Values.front.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.front.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.front.livenessProbe.failureThreshold }}
+        env:
+          - name: PORT
+            value: {{ .Values.front.port | quote }}
+          - name: REACT_APP_SERVER_URL
+            value: ""
+---

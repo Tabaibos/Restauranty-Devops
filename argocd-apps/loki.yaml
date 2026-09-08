@@ -1,0 +1,71 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki-distributed
+    targetRevision: 0.80.6
+    helm:
+      valuesObject:
+        loki:
+          commonConfig:
+            replication_factor: 1
+          schemaConfig:
+            configs:
+              - from: "2024-01-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: index_
+                  period: 24h
+          storageConfig:
+            tsdb_shipper:
+              active_index_directory: /var/loki/tsdb-index
+              cache_location: /var/loki/tsdb-cache
+              cache_ttl: 24h
+              shared_store: filesystem
+            filesystem:
+              directory: /var/loki/chunks
+          limits_config:
+            retention_period: 168h
+            volume_enabled: true
+
+        ingester:
+          replicas: 1
+          persistence:
+            enabled: true
+            claims:
+              - name: data
+                size: 10Gi
+                storageClass: azurefile-csi
+
+        querier:
+          replicas: 1
+
+        queryFrontend:
+          replicas: 1
+
+        distributor:
+          replicas: 1
+
+        compactor:
+          enabled: true
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    syncOptions:
+      - ServerSideApply=true

@@ -1,0 +1,70 @@
+client/node_modules
+mobile/node_modules
+server/node_modules
+client/.env
+mobile/.env
+server/.env
+backend/*/.env
+backend/*/node_modules
+mobile/.expo
+
+
+# ---- Node.js (backend/*, client) ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ---- Environment files (never commit secrets) ----
+.env
+.env.*
+!.env.example
+backend/*/.env
+backend/*/.env.*
+client/.env
+client/.env.*
+
+# ---- React build output ----
+client/build/
+client/dist/
+
+# ---- Terraform (Infra/) ----
+Infra/.terraform/
+Infra/.terraform.lock.hcl
+Infra/*.tfstate
+Infra/*.tfstate.*
+Infra/*.tfplan
+Infra/crash.log
+Infra/crash.*.log
+Infra/*.tfvars
+Infra/*.tfvars.json
+!Infra/*.tfvars.example
+# In case terraform ends up nested one level deeper instead:
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+
+# ---- Generated / rendered k8s manifests ----
+**/k8s-rendered/
+
+# ---- Docker ----
+docker-compose.override.yml
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# ---- Misc ----
+*.tar
+*.zip
+
+argocd-apps/backup-tls-secret.yaml
+
+
+temp_aks_data.txt
+README_PLAN.md

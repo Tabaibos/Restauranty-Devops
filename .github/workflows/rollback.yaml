@@ -1,0 +1,108 @@
+name: Rollback Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to rollback'
+        required: true
+        type: choice
+        options:
+          - front(/client)
+          - auth
+          - items
+          - discounts
+      image_tag:
+        description: 'image tag (SHA of commit) to rollback to, ex: a1b2c3d'
+        required: true
+        type: string
+
+env:
+  AZURE_RESOURCE_GROUP: restauranty-rg-joaquim
+  AKS_CLUSTER_NAME: restauranty-aks
+  ACR_NAME: restaurantyacrjoaquim
+  HELM_CHART_PATH: k8s/
+  HELM_RELEASE_NAME: restauranty
+  NAMESPACE: restauranty
+
+
+jobs:
+  rollback:
+    name:  Rollback ${{ github.event.inputs.service }} to ${{ github.event.inputs.image_tag }}
+    runs-on: ubuntu-latest
+    environment: production
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}    
+      
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Install kubectl (if missing)
+        run: |
+          if command -v kubectl >/dev/null 2>&1; then
+            echo "kubectl já instalado"
+          else
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+
+      - name: Install Helm (if missing)
+        run: |
+          if command -v helm >/dev/null 2>&1; then
+            echo "helm já instalado"
+          else
+            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          fi
+
+      - name: Update kubeconfig (az aks get-credentials)
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AKS_CLUSTER_NAME }} \
+            --overwrite-existing
+
+            
+      - name: Resolve image repository for selected service
+        id: image
+        run: |
+          case "${{ github.event.inputs.service }}" in
+            auth)   echo "repo=${{ env.ACR_NAME }}.azurecr.io/auth-restauranty" >> "$GITHUB_OUTPUT" ;;
+            items) echo "repo=${{ env.ACR_NAME }}.azurecr.io/items-restauranty" >> "$GITHUB_OUTPUT" ;;
+            discounts) echo "repo=${{ env.ACR_NAME }}.azurecr.io/discounts-restauranty" >> "$GITHUB_OUTPUT" ;;
+            front) echo "repo=${{ env.ACR_NAME }}.azurecr.io/front-restauranty" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Confirm image tag exists on Azure Containter Registry (ACR)
+        run: |
+          az acr repository show \
+            --image "${{ steps.image.outputs.repo }}:${{ github.event.inputs.image_tag }}" \ > /dev/null \
+               || (
+              echo "Tag ${{ github.event.inputs.image_tag }} não existe em ${{ env.ACR_NAME }}"
+              exit 1
+              
+      - name: Rollback via Helm
+        run: |
+          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ${{ env.HELM_CHART_PATH }} \
+            --namespace default \
+            --reuse-values \
+            --set ${{ github.event.inputs.service }}.image.repository=${{ steps.image.outputs.repo }} \
+            --set ${{ github.event.inputs.service }}.image.tag=${{ github.event.inputs.image_tag }} \
+            --wait --timeout 5m
+
+      - name: Verify rollout
+        run: kubectl rollout status deployment/${{ github.event.inputs.service }}-deployment --timeout=120s
