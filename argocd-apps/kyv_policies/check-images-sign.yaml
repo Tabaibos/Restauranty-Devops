@@ -1,0 +1,24 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signature
+spec:
+  validationFailureAction: Audit
+  background: false
+  rules:
+    - name: check-signature
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      verifyImages:
+        - imageReferences:
+            - "restaurantyacrjoaquim.azurecr.io/*"
+          mutateDigest: false
+          attestors:
+            - entries:
+                - keyless:
+                    subject: "https://github.com/Tabaibos/Restauranty-Devops/.github/workflows/production-pipeline.yaml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
