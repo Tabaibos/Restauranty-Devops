@@ -87,6 +87,9 @@ jobs:
         run: |
           az acr login --name ${{ env.ACR_NAME }}
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Build and push auth image
         if: needs.detect-changes.outputs.auth == 'true'
         run: |
@@ -103,6 +106,10 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+
+      - name: Sign auth image with cosign
+        if: needs.detect-changes.outputs.auth == 'true'
+        run: cosign sign --yes ${{ env.ACR_NAME }}.azurecr.io/auth-restauranty:${{ github.sha }}
 
       - name: Build and push discounts image
         if: needs.detect-changes.outputs.discounts == 'true'
