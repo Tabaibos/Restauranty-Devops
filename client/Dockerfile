@@ -14,7 +14,7 @@ ENV DISABLE_ESLINT_PLUGIN=true
 
 RUN npm run build
 
-# --- Runtime stage ---
+# --- Runtime stage - ---
 FROM nginx:1.27-alpine
 
 RUN apk update && apk upgrade
