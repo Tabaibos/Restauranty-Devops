@@ -68,3 +68,5 @@ argocd-apps/backup-tls-secret.yaml
 
 temp_aks_data.txt
 README_PLAN.md
+
+.env

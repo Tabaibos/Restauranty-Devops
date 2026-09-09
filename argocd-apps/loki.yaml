@@ -37,6 +37,7 @@ spec:
 
         ingester:
           replicas: 1
+          flush_on_shutdown: true
           persistence:
             enabled: true
             claims:
