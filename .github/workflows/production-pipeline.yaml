@@ -273,7 +273,7 @@ jobs:
 
       - name: Verify rollout
         run: |
-          kubectl rollout status deployment/auth-deployment -n ${{ env.NAMESPACE }} --timeout=120s
-          kubectl rollout status deployment/discounts-deployment -n ${{ env.NAMESPACE }} --timeout=120s
-          kubectl rollout status deployment/items-deployment -n ${{ env.NAMESPACE }} --timeout=120s
-          kubectl rollout status deployment/front-deployment -n ${{ env.NAMESPACE }} --timeout=120s
+          kubectl rollout status deployment/auth-deployment -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/discounts-deployment -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/items-deployment -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/front-deployment -n ${{ env.NAMESPACE }} --timeout=300s

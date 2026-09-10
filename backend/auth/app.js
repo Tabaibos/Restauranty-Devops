@@ -18,7 +18,7 @@ app.use(cors({
 }));
 app.use(httpMetricsMiddleware);
 
-// ℹ️ This function is getting exported from the config folder. It runs most pieces of middleware. Just for testing cosign
+// ℹ️ This function is getting exported from the config folder. It runs most pieces of middleware.
 require("./config")(app);
 
 require('./metrics.cjs');
