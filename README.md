@@ -1,97 +1,113 @@
-# Restauranty
+# Restauranty — DevOps Platform Engineering Project
 
-A restaurant management platform built with a **microservices architecture**: 3 Node.js/Express backends + a React frontend, unified behind HAProxy path-based routing.
+A production-style DevOps platform built around a 3-microservice restaurant management app — the app itself is intentionally simple; the goal was to build and operate the full platform around it: **GitOps, observability, runtime security, admission control, cost visibility, and chaos-tested resilience** on Azure Kubernetes Service.
 
-## Architecture
+> 📄 See [`argocdDashboard.png`](./argocdDashboard.png) for argoCD UI displaying all the deployment managed.
+> 📄 See [`ChaosTest_Report.pdf`](ChaosTest_Report.pdf) for full chaos engineering results.
+
+---
+
+## Challenges passed
+
+Most portfolio projects show a finished architecture diagram. This portfolio shows the path to get there — a live AKS cluster that hit real, unscripted failures along the way, and the diagnosis and decisions that got it back to stable. Below are some highlights of troubleshooting when bilding this platform:
+- Migrated 8+ imperative `helm upgrade` releases to a fully GitOps ArgoCD workflow
+- Ran real chaos engineering experiments (Chaos Mesh) that uncovered a genuine resilience gap — a TCP-only readiness probe that never detected a broken MongoDB connection — rather than just confirming a happy path
+- Had my own policy (Kyverno) catch real technical debt in my own platform — a missing `resources.limits` on the Grafana sidecars — proofing the guardrail works against its own author, not just hypothetical bad actors
+- - Diagnosed a dual, independent root cause behind days of Grafana instability — an external plugin timing out on startup, stacked with a separate SQLite-vs-RollingUpdate concurrency bug — only found by reading `--previous` container logs line by line after multiple surface-level fixes failed
+
+---
+
+## Platform Architecture
 
 ```
-                         ┌────────────────────────┐
-                         │   HAProxy / Ingress    │
-    Browser ───────────► │       (port 80)        │
-                         └───────────┬────────────┘
-                                     │
-            ┌────────────────────────┼─────────────────────────┐
-            │                        │                         │
-       /api/auth/*             /api/items/*             /api/discounts/*
-            │                        │                         │
-   ┌────────▼────────┐     ┌─────────▼─────────┐    ┌─────────▼──────────┐
-   │  Auth Service   │     │  Items Service    │    │ Discounts Service  │
-   │   (port 3001)   │     │   (port 3003)     │    │   (port 3002)      │
-   └────────┬────────┘     └─────────┬─────────┘    └──────────┬─────────┘
-            │                        │                         │
-            └────────────────────────┼─────────────────────────┘
-                                     │
-                              ┌──────▼──────┐
-                              │   MongoDB   │
-                              │ (port 27017)│
-                              └─────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         GitHub Actions                          │
+│  detect-changes → secret-scan (TruffleHog) → build+scan (Trivy) │
+│         → sign (cosign, keyless/OIDC) → deploy (ArgoCD)         │
+└──────────────────────────────┬──────────────────────────────────┘
+                                │
+┌───────────────────────────────▼──────────────────────────────────┐
+│                         Azure Kubernetes Service                 │
+│                                                                    │
+│  GitOps (ArgoCD, 11+ Applications)                                │
+│  ├─ Runtime security: Falco (eBPF)                                │
+│  ├─ Admission control: Kyverno (image signing, resource limits,  │
+│  │   non-root enforcement, PolicyReport auditing)                 │
+│  ├─ Observability: Prometheus + Grafana + Loki + Tempo + Alloy    │
+│  ├─ Cost visibility: Kubecost                                     │
+│  ├─ Node scaling: NAP (Karpenter) + HPA + Descheduler             │
+│  └─ Chaos engineering: Chaos Mesh                                 │
+│                                                                    │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
+│  │ Auth Service │  │ Items Service│  │  Discounts   │            │
+│  │  (Node/Exp)  │  │  (Node/Exp)  │  │  (Node/Exp)  │            │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘            │
+│         └──────────────────┼──────────────────┘                   │
+│                        MongoDB                                    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## Microservices
+---
 
-| Service | Port | Path | Responsibilities |
-|---------|------|------|-----------------|
-| **Auth** | 3001 | `/api/auth/*` | User signup, login, JWT authentication |
-| **Discounts** | 3002 | `/api/discounts/*` | Coupon and campaign management |
-| **Items** | 3003 | `/api/items/*` | Menu items, dietary categories, orders |
-| **Frontend** | 3000 | `/` | React SPA (admin dashboard) |
+## Platform components
 
-## Quick Start
+| Layer | Tool | What it does here |
+|---|---|---|
+| GitOps | ArgoCD | 11+ Applications, manual sync policy by design (documented trade-off) |
+| IaC | Terraform | AKS, ACR, networking, NAP, RBAC |
+| CI/CD | GitHub Actions | Change-detection per service, parallel security gates |
+| Secret scanning | TruffleHog | Blocks builds on detected secrets |
+| Image scanning | Trivy | CVE scanning, CRITICAL/HIGH fails the build |
+| Image signing | cosign | Keyless (OIDC), verified at admission by Kyverno |
+| Admission control | Kyverno | Image signature verification, resource limits, non-root enforcement |
+| Runtime security | Falco | eBPF-based syscall monitoring, custom rules for the app namespace |
+| Metrics | Prometheus | Cluster + application metrics |
+| Logs | Loki | Centralized log aggregation |
+| Traces | Tempo | Distributed tracing across all 3 microservices |
+| Dashboards | Grafana | Cost, ops/support, and stakeholder-facing dashboards — all as code |
+| Cost visibility | Kubecost | Per-namespace and per-service cost attribution |
+| Node scaling | NAP (Karpenter-on-Azure) | Dynamic node provisioning under real scheduling pressure |
+| Pod scaling | HPA | Validated live via chaos-induced CPU load |
+| Chaos engineering | Chaos Mesh | Pod-kill, CPU stress, network partition experiments |
 
-### 1. Start MongoDB
+---
+
+## The application (what's being operated)
+
+3 Node.js/Express microservices + a React frontend, routed via HAProxy (local) or Kubernetes Ingress (production).
+
+| Service | Path | Responsibility |
+|---|---|---|
+| Auth | `/api/auth/*` | Signup, login, JWT auth |
+| Discounts | `/api/discounts/*` | Coupons, campaigns |
+| Items | `/api/items/*` | Menu items, categories, orders |
+| Frontend | `/` | React SPA admin dashboard |
+
+### Running locally
 
 ```bash
-docker run -d \
-  --name my-mongo \
-  -p 27017:27017 \
-  -v mongo-data:/data/db \
-  mongo:latest
-```
+docker run -d --name my-mongo -p 27017:27017 -v mongo-data:/data/db mongo:latest
 
-### 2. Start each microservice
+cd backend/auth && npm install && npm start        # terminal 1
+cd backend/discounts && npm install && npm start   # terminal 2
+cd backend/items && npm install && npm start        # terminal 3
+cd client && npm install && npm start               # terminal 4
 
-```bash
-# Terminal 1 - Auth
-cd backend/auth && npm install && npm start
-
-# Terminal 2 - Discounts
-cd backend/discounts && npm install && npm start
-
-# Terminal 3 - Items
-cd backend/items && npm install && npm start
-
-# Terminal 4 - Frontend
-cd client && npm install && npm start
-```
-
-### 3. Start HAProxy
-
-```bash
 haproxy -f haproxy.cfg
 ```
 
-Access the app at **http://localhost/**
+Access at `http://localhost/`.
 
-## Environment Variables
+Environment variables — see `.env.example` in each service folder. Never commit real secrets; in production these are injected via CI/CD directly into Kubernetes Secrets, never stored in Git.
 
-Each microservice uses the same set of environment variables (see `.env.example` in each service folder):
+---
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `SECRET` | JWT signing key | `MySecret1!` |
-| `MONGODB_URI` | MongoDB connection string | `mongodb://127.0.0.1:27017/restauranty` |
-| `CLOUD_NAME` | Cloudinary cloud name | _(ask instructor)_ |
-| `CLOUD_API_KEY` | Cloudinary API key | _(ask instructor)_ |
-| `CLOUD_API_SECRET` | Cloudinary API secret | _(ask instructor)_ |
-| `PORT` | Service port | `3001` / `3002` / `3003` |
+## Known limitations (documented, not hidden)
 
-For the frontend, use the `REACT_APP_` prefix: `REACT_APP_API_URL=http://localhost:80`
+- Kyverno `require-non-root` policy runs in `Audit` mode — 4 deployments still need `runAsNonRoot` + pinned tags before `Enforce` is safe
+- Readiness probes use `tcpSocket`, not a real MongoDB connectivity check — discovered via chaos testing, fix requires an application-level `/health` endpoint
+- Loki (`loki-distributed`) has a recurring, not-fully-root-caused index corruption bug under sustained load — migration to `SingleBinary` deployment mode is designed but not implemented (deferred: project scope)
+- No multi-environment promotion (dev/staging/prod) — single-environment by design for this project's scope
+- A synthetic-user probe was designed to actively measure real end-to-end availability (not just infer it from pod health), but was never implemented due to time constraints — the Stakeholders dashboard's "Availability" panel remains empty as a result
 
-## Tech Stack
-
-- **Frontend**: React 18, React Router 6, Tailwind CSS, Axios, React Icons
-- **Backend**: Express, Mongoose, JWT (jsonwebtoken + express-jwt), bcryptjs
-- **Image Storage**: Cloudinary (via multer-storage-cloudinary)
-- **Monitoring**: Prometheus metrics (`/metrics` endpoint on each backend service)
-- **Routing**: HAProxy (local) / Kubernetes Ingress (production)
-- **Database**: MongoDB
+---
