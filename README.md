@@ -13,7 +13,7 @@ Most portfolio projects show a finished architecture diagram. This portfolio sho
 - Migrated 8+ imperative `helm upgrade` releases to a fully GitOps ArgoCD workflow
 - Ran real chaos engineering experiments (Chaos Mesh) that uncovered a genuine resilience gap — a TCP-only readiness probe that never detected a broken MongoDB connection — rather than just confirming a happy path
 - Had my own policy (Kyverno) catch real technical debt in my own platform — a missing `resources.limits` on the Grafana sidecars — proofing the guardrail works against its own author, not just hypothetical bad actors
-- - Diagnosed a dual, independent root cause behind days of Grafana instability — an external plugin timing out on startup, stacked with a separate SQLite-vs-RollingUpdate concurrency bug — only found by reading `--previous` container logs line by line after multiple surface-level fixes failed
+- Diagnosed a dual, independent root cause behind days of Grafana instability — an external plugin timing out on startup, stacked with a separate SQLite-vs-RollingUpdate concurrency bug — only found by reading `--previous` container logs line by line after multiple surface-level fixes failed
 
 ---
 
@@ -102,7 +102,7 @@ Environment variables — see `.env.example` in each service folder. Never commi
 
 ---
 
-## Known limitations (documented, not hidden)
+## Known limitations 
 
 - Kyverno `require-non-root` policy runs in `Audit` mode — 4 deployments still need `runAsNonRoot` + pinned tags before `Enforce` is safe
 - Readiness probes use `tcpSocket`, not a real MongoDB connectivity check — discovered via chaos testing, fix requires an application-level `/health` endpoint
